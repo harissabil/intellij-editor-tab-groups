@@ -11,20 +11,19 @@ import java.awt.Graphics2D
 import java.awt.Point
 import java.awt.Rectangle
 import java.awt.RenderingHints
-import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.JComponent
-import javax.swing.SwingUtilities
-import kotlin.math.abs
 
-/** Group label in the tab strip. Click toggles collapse, right click opens the group panel, drag moves the group. */
-internal class GroupChip(val groupId: String, private val callbacks: Callbacks) : JComponent() {
+/**
+ * Group label in the tab strip. Mouse input is handled by the strip adapter before it reaches the tab
+ * strip, so pressing the chip never starts IntelliJ's own tab drag.
+ */
+internal class GroupChip(val groupId: String) : JComponent() {
     interface Callbacks {
         fun toggle(chip: GroupChip)
         fun showMenu(chip: GroupChip)
-        fun dragStarted(chip: GroupChip)
-
-        fun dragFinished(chip: GroupChip, screenPoint: Point)
+        fun dragMoved(chip: GroupChip, screenPoint: Point)
+        fun dragFinished(chip: GroupChip, screenPoint: Point?)
     }
 
     var label: String = ""
@@ -53,49 +52,11 @@ internal class GroupChip(val groupId: String, private val callbacks: Callbacks) 
             }
         }
 
-    private var pressPoint: Point? = null
-    private var dragging = false
-
     init {
         isOpaque = false
         font = JBUI.Fonts.label().asBold()
+        cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
         updateTooltip()
-        val mouse = object : MouseAdapter() {
-            override fun mousePressed(e: MouseEvent) {
-                if (e.isPopupTrigger) {
-                    callbacks.showMenu(this@GroupChip)
-                } else if (SwingUtilities.isLeftMouseButton(e)) {
-                    pressPoint = e.point
-                }
-                e.consume()
-            }
-
-            override fun mouseDragged(e: MouseEvent) {
-                val start = pressPoint ?: return
-                if (!dragging && (abs(e.x - start.x) > JBUI.scale(6) || abs(e.y - start.y) > JBUI.scale(6))) {
-                    dragging = true
-                    cursor = Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR)
-                    callbacks.dragStarted(this@GroupChip)
-                }
-                e.consume()
-            }
-
-            override fun mouseReleased(e: MouseEvent) {
-                if (e.isPopupTrigger) {
-                    callbacks.showMenu(this@GroupChip)
-                } else if (dragging) {
-                    callbacks.dragFinished(this@GroupChip, e.locationOnScreen)
-                } else if (pressPoint != null && SwingUtilities.isLeftMouseButton(e) && contains(e.point)) {
-                    callbacks.toggle(this@GroupChip)
-                }
-                pressPoint = null
-                dragging = false
-                cursor = Cursor.getDefaultCursor()
-                e.consume()
-            }
-        }
-        addMouseListener(mouse)
-        addMouseMotionListener(mouse)
     }
 
     private fun updateTooltip() {

@@ -6,21 +6,28 @@ import com.github.harissabil.editortabgroups.ui.OverflowBadge
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileEditor.impl.EditorWindow
+import com.intellij.openapi.util.Weighted
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.IdeGlassPaneUtil
 import com.intellij.ui.tabs.JBTabs
 import com.intellij.ui.tabs.JBTabsEx
 import com.intellij.ui.tabs.TabInfo
 import com.intellij.ui.tabs.TabsListener
+import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Container
+import java.awt.Cursor
+import java.awt.Rectangle
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 import java.awt.Dimension
 import java.awt.Point
 import java.util.IdentityHashMap
 import javax.swing.JComponent
 import javax.swing.SwingUtilities
 import javax.swing.Timer
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private val LOG = logger<TabStripAdapter>()
@@ -170,7 +177,7 @@ internal class TabStripAdapter(
                 LOG.warn("Tab label layout is ${label.layout?.javaClass?.name}, expected BorderLayout")
                 continue
             }
-            val chip = chips.getOrPut(view.groupId) { GroupChip(view.groupId, chipCallbacks) }
+            val chip = chips.getOrPut(view.groupId) { GroupChip(view.groupId) }
             chip.label = view.label
             chip.color = view.color
             chip.collapsed = view.collapsed
@@ -258,9 +265,11 @@ internal class TabStripAdapter(
         val component = tabs.component
         if (painter == null) {
             if (!component.isShowing) return
-            painter = GroupDecorationPainter(component).also {
-                IdeGlassPaneUtil.find(component).addPainter(component, it, this)
-            }
+            val glassPane = IdeGlassPaneUtil.find(component)
+            painter = GroupDecorationPainter(component).also { glassPane.addPainter(component, it, this) }
+            val mouse = ChipMouse()
+            glassPane.addMousePreprocessor(mouse, this)
+            glassPane.addMouseMotionPreprocessor(mouse, this)
         }
         painter?.decorations = views.mapNotNull { view ->
             val chip = chips[view.groupId]?.takeIf { it.parent != null } ?: return@mapNotNull null
@@ -268,6 +277,84 @@ internal class TabStripAdapter(
                 .filter { !it.isHidden && fileOf(it) in view.members && !(view.compact && fileOf(it) == view.carrier) }
                 .mapNotNull(tabs::getTabLabel)
             GroupDecoration(chip, labels, badges[view.groupId]?.takeIf { it.parent != null })
+        }
+    }
+
+    /** Shows where a dragged group would land: at the left or right edge of the tab under [screenPoint]. */
+    fun showDropMarker(screenPoint: Point, excluded: Set<VirtualFile>, color: TabGroupColor) {
+        val (file, leftHalf) = tabAt(screenPoint) ?: return clearDropMarker()
+        if (file in excluded) return clearDropMarker()
+        val info = tabs.tabs.firstOrNull { fileOf(it) == file } ?: return clearDropMarker()
+        val label = tabs.getTabLabel(info) ?: return clearDropMarker()
+        val r = SwingUtilities.convertRectangle(label.parent, label.bounds, tabs.component)
+        val width = JBUI.scale(2)
+        val x = if (leftHalf) r.x else r.x + r.width - width
+        painter?.dropMarker = Rectangle(x, r.y + JBUI.scale(4), width, r.height - JBUI.scale(8)) to color
+    }
+
+    fun clearDropMarker() {
+        painter?.dropMarker = null
+    }
+
+    // Runs before IntelliJ's tab drag (MouseDragHelper, weight 2) and consumes events on chips, so pressing
+    // a chip never drags its tab.
+    private inner class ChipMouse : MouseAdapter(), Weighted {
+        private var pressed: GroupChip? = null
+        private var pressPoint: Point? = null
+        private var dragging = false
+
+        override fun getWeight(): Double = 1.0
+
+        private fun chipAt(e: MouseEvent): GroupChip? = chips.values.firstOrNull { chip ->
+            chip.isShowing && Point(e.locationOnScreen).let {
+                SwingUtilities.convertPointFromScreen(it, chip)
+                chip.contains(it)
+            }
+        }
+
+        override fun mousePressed(e: MouseEvent) {
+            val chip = chipAt(e) ?: return
+            e.consume()
+            if (e.isPopupTrigger) return chipCallbacks.showMenu(chip)
+            if (!SwingUtilities.isLeftMouseButton(e)) return
+            pressed = chip
+            pressPoint = e.locationOnScreen
+            dragging = false
+        }
+
+        override fun mouseDragged(e: MouseEvent) {
+            val chip = pressed ?: return
+            e.consume()
+            val start = pressPoint ?: return
+            val p = e.locationOnScreen
+            if (!dragging && (abs(p.x - start.x) > JBUI.scale(6) || abs(p.y - start.y) > JBUI.scale(6))) {
+                dragging = true
+                chip.cursor = Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR)
+            }
+            if (dragging) chipCallbacks.dragMoved(chip, p)
+        }
+
+        override fun mouseReleased(e: MouseEvent) {
+            val chip = pressed
+            if (chip == null) {
+                chipAt(e)?.let {
+                    e.consume()
+                    if (e.isPopupTrigger) chipCallbacks.showMenu(it)
+                }
+                return
+            }
+            e.consume()
+            pressed = null
+            chip.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+            when {
+                dragging -> chipCallbacks.dragFinished(chip, e.locationOnScreen)
+                chipAt(e) === chip -> chipCallbacks.toggle(chip)
+            }
+            dragging = false
+        }
+
+        override fun mouseClicked(e: MouseEvent) {
+            if (chipAt(e) != null) e.consume()
         }
     }
 

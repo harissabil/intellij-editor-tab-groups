@@ -1,5 +1,6 @@
 package com.github.harissabil.editortabgroups.platform
 
+import com.github.harissabil.editortabgroups.core.TabGroupColor
 import com.github.harissabil.editortabgroups.ui.GroupChip
 import com.github.harissabil.editortabgroups.ui.GroupColors
 import com.github.harissabil.editortabgroups.ui.OverflowBadge
@@ -7,6 +8,7 @@ import com.intellij.openapi.ui.AbstractPainter
 import com.intellij.util.ui.JBUI
 import java.awt.Component
 import java.awt.Graphics2D
+import java.awt.Rectangle
 import java.awt.RenderingHints
 import javax.swing.JComponent
 import javax.swing.SwingUtilities
@@ -24,7 +26,14 @@ internal class GroupDecorationPainter(private val tabsComponent: JComponent) : A
             setNeedsRepaint(true)
         }
 
-    override fun needsRepaint(): Boolean = decorations.isNotEmpty()
+    /** Insertion bar while a group is dragged, in tab strip coordinates. */
+    var dropMarker: Pair<Rectangle, TabGroupColor>? = null
+        set(value) {
+            field = value
+            setNeedsRepaint(true)
+        }
+
+    override fun needsRepaint(): Boolean = decorations.isNotEmpty() || dropMarker != null
 
     override fun executePaint(component: Component, g: Graphics2D) {
         if (!tabsComponent.isShowing) return
@@ -34,6 +43,11 @@ internal class GroupDecorationPainter(private val tabsComponent: JComponent) : A
             g2.clip(clip)
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
             for (d in decorations) paint(component, g2, d)
+            dropMarker?.let { (rect, color) ->
+                val r = SwingUtilities.convertRectangle(tabsComponent, rect, component)
+                g2.color = GroupColors.chip(color)
+                g2.fillRoundRect(r.x, r.y, r.width, r.height, r.width, r.width)
+            }
         } finally {
             g2.dispose()
         }

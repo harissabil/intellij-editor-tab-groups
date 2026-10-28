@@ -66,8 +66,6 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
     private val pending = ArrayList<StripSnapshot>()
     private var settled = false
     private var syncQueued = false
-    private var groupDrag: Pair<EditorWindow, String>? = null
-    private var groupDragHandled = false
 
     // getState can be called off the EDT
     @Volatile
@@ -353,17 +351,8 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
                 sync()
                 return
             }
-            val drag = groupDrag
-            if (drag != null && drag.first == s.window && moved == s.model.carrier(drag.second, s.order)) {
-                // The chip's tab was dragged along with the chip: move the whole group.
-                groupDragHandled = true
-                val group = s.model.group(drag.second)
-                val after = order.drop(order.indexOf(moved) + 1).firstOrNull { group == null || it !in group.files }
-                applyOrder(s, s.model.moveGroup(drag.second, order, after, pinned))
-            } else {
-                s.model.onTabMoved(moved, order, pinned, oldStrip = s.order)
-                applyOrder(s, s.model.arrange(order, pinned))
-            }
+            s.model.onTabMoved(moved, order, pinned, oldStrip = s.order)
+            applyOrder(s, s.model.arrange(order, pinned))
             sync()
         }
     }
@@ -374,17 +363,16 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
         override fun showMenu(chip: GroupChip) =
             GroupEditorPopup.show(project, window, chip.groupId, chip, createMode = false)
 
-        override fun dragStarted(chip: GroupChip) {
-            groupDrag = window to chip.groupId
-            groupDragHandled = false
+        override fun dragMoved(chip: GroupChip, screenPoint: Point) {
+            val s = strips[window] ?: return
+            val group = s.model.group(chip.groupId) ?: return
+            val members = s.adapter.files().filter { it.url in group.files }.toSet()
+            s.adapter.showDropMarker(screenPoint, members, group.color)
         }
 
-        override fun dragFinished(chip: GroupChip, screenPoint: Point) {
-            // A tabsMoved from the same mouse release must be handled first.
-            ApplicationManager.getApplication().invokeLater({
-                if (!groupDragHandled) dropGroup(window, chip.groupId, screenPoint)
-                groupDrag = null
-            }, ModalityState.any(), project.disposed)
+        override fun dragFinished(chip: GroupChip, screenPoint: Point?) {
+            strips[window]?.adapter?.clearDropMarker()
+            if (screenPoint != null) dropGroup(window, chip.groupId, screenPoint)
         }
     }
 
