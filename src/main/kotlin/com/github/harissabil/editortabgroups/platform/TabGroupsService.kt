@@ -18,6 +18,8 @@ import com.intellij.openapi.components.State
 import com.intellij.openapi.components.Storage
 import com.intellij.openapi.components.StoragePathMacros
 import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.debug
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
@@ -46,6 +48,8 @@ import javax.swing.Timer
  * Editor windows have no identity across restarts, so saved strips are matched to restored windows by
  * shared files ([StripMatcher]). Whatever is still unmatched once restoring settles becomes saved groups.
  */
+private val LOG = logger<TabGroupsService>()
+
 @Service(Service.Level.PROJECT)
 @State(name = "EditorTabGroups", storages = [Storage(StoragePathMacros.WORKSPACE_FILE)])
 class TabGroupsService(private val project: Project) : PersistentStateComponent<TabGroupsState>, Disposable {
@@ -69,7 +73,7 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
     @Volatile
     private var stateSnapshot = TabGroupsState()
 
-    // Reordering while a tab is being dragged would fight the drag.
+    // Touching the tab strip during a tab drag breaks the drag, so syncing waits for the mouse release.
     private var mouseDown = false
 
     private val settleTimer = Timer(4000) { settle() }.apply { isRepeats = false }
@@ -92,15 +96,15 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
             }
         })
         val mouseListener = AWTEventListener { e ->
-            when (e.id) {
-                MouseEvent.MOUSE_PRESSED -> mouseDown = true
-                MouseEvent.MOUSE_RELEASED -> {
-                    mouseDown = false
-                    queueSync()
-                }
-            }
+            val down = (e as? MouseEvent)?.modifiersEx?.and(BUTTONS_DOWN) ?: 0
+            val wasDown = mouseDown
+            mouseDown = down != 0
+            if (wasDown && !mouseDown) queueSync()
         }
-        Toolkit.getDefaultToolkit().addAWTEventListener(mouseListener, AWTEvent.MOUSE_EVENT_MASK)
+        Toolkit.getDefaultToolkit().addAWTEventListener(
+            mouseListener,
+            AWTEvent.MOUSE_EVENT_MASK or AWTEvent.MOUSE_MOTION_EVENT_MASK,
+        )
         settleTimer.start()
         Disposer.register(this) {
             settleTimer.stop()
@@ -209,13 +213,15 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
     private fun queueSync() {
         if (syncQueued) return
         syncQueued = true
-        ApplicationManager.getApplication().invokeLater({ sync() }, ModalityState.any(), project.disposed)
+        ApplicationManager.getApplication().invokeLater({ sync(force = false) }, ModalityState.any(), project.disposed)
     }
 
     @RequiresEdt
-    fun sync() {
+    fun sync() = sync(force = true)
+
+    private fun sync(force: Boolean) {
         syncQueued = false
-        if (project.isDisposed) return
+        if (project.isDisposed || !force && mouseDown) return
         val live = FileEditorManagerEx.getInstanceEx(project).windows.filter { !it.isDisposed }
 
         for ((window, s) in strips.toList()) {
@@ -251,7 +257,10 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
 
         val keys = files.map { it.url }
         val order = s.model.arrange(keys, pinned)
-        if (!mouseDown && order != keys) s.adapter.reorder(order.mapNotNull(byKey::get))
+        if (order != keys) {
+            LOG.debug { "sync reorders strip: $keys -> $order" }
+            s.adapter.reorder(order.mapNotNull(byKey::get))
+        }
 
         val selected = s.adapter.selectedFile()?.url
         val chips = s.model.groups.mapNotNull { g ->
@@ -269,11 +278,8 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
         }
         val hidden = s.model.hiddenFiles(order, selected)
         s.adapter.render(StripView(hidden.mapNotNull(byKey::get).toSet(), chips))
-        // Keep the pre-drag order while the mouse is down, so the drop can be compared against it.
-        if (!mouseDown) {
-            s.order = order
-            s.visible = order.filter { it !in hidden || it == selected }
-        }
+        s.order = order
+        s.visible = order.filter { it !in hidden }
     }
 
     private fun applyOrder(s: Strip, order: List<String>) {
@@ -330,6 +336,7 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
         override fun selectionChanged(strip: TabStripAdapter) = queueSync()
 
         override fun tabRemoved(strip: TabStripAdapter, file: VirtualFile) {
+            LOG.debug { "tabRemoved: ${file.url}" }
             strips[strip.window]?.closed?.add(file.url)
             queueSync()
         }
@@ -338,7 +345,11 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
             val s = strips[strip.window] ?: return
             val pinned = pinnedKeys(s)
             val visibleNow = s.adapter.visibleFiles().map { it.url }
-            val (order, moved) = TabGroupModel.applyVisibleMove(s.order, s.visible, visibleNow) ?: run {
+            // the tab being dragged was selected when it was pressed
+            val dragged = s.adapter.selectedFile()?.url
+            val move = TabGroupModel.applyVisibleMove(s.order, s.visible, visibleNow, dragged)
+            LOG.debug { "tabsMoved: before=${s.visible} after=$visibleNow dragged=$dragged move=$move" }
+            val (order, moved) = move ?: run {
                 sync()
                 return
             }
@@ -350,7 +361,7 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
                 val after = order.drop(order.indexOf(moved) + 1).firstOrNull { group == null || it !in group.files }
                 applyOrder(s, s.model.moveGroup(drag.second, order, after, pinned))
             } else {
-                s.model.onTabMoved(moved, order, pinned)
+                s.model.onTabMoved(moved, order, pinned, oldStrip = s.order)
                 applyOrder(s, s.model.arrange(order, pinned))
             }
             sync()
@@ -443,6 +454,9 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
     }
 
     companion object {
+        private const val BUTTONS_DOWN =
+            MouseEvent.BUTTON1_DOWN_MASK or MouseEvent.BUTTON2_DOWN_MASK or MouseEvent.BUTTON3_DOWN_MASK
+
         fun getInstance(project: Project): TabGroupsService = project.service()
     }
 }

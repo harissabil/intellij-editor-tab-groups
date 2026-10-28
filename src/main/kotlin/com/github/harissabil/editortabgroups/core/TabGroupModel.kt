@@ -164,19 +164,32 @@ class TabGroupModel(
     }
 
     /**
-     * Membership after a drag: a member stays while it touches its group, a tab dropped between two
-     * members of a group joins it, anything else is ungrouped.
+     * Membership after a drag: a member stays while it touches its group, and a tab dropped right after
+     * a member joins that member's group. A tab dropped in front of a group's first tab stays outside,
+     * since that is left of the chip, except for a one-tab group it was dragged over from the right:
+     * tabs swap places while dragging, so from that side this is the only way to reach the group.
+     * A group's only tab keeps its group.
      */
-    fun onTabMoved(moved: String, newStrip: List<String>, pinned: Set<String> = emptySet()) {
+    fun onTabMoved(
+        moved: String,
+        newStrip: List<String>,
+        pinned: Set<String> = emptySet(),
+        oldStrip: List<String> = emptyList(),
+    ) {
         val strip = newStrip.filter { it !in pinned }
         val i = strip.indexOf(moved)
         if (i < 0) return
         val prev = strip.getOrNull(i - 1)?.let(::groupOf)
         val next = strip.getOrNull(i + 1)?.let(::groupOf)
         val own = groupOf(moved)
+        val crossedSingle = next?.takeIf { it.files.size == 1 && it.id != own?.id }
+            ?.takeIf { oldStrip.indexOf(moved) > oldStrip.indexOf(it.files.single()) && it.files.single() in oldStrip }
         val target = when {
             own != null && (prev?.id == own.id || next?.id == own.id) -> own
-            prev != null && prev.id == next?.id -> prev
+            prev != null -> prev
+            crossedSingle != null -> crossedSingle
+            // a group's only tab takes its group along
+            own != null && own.files.size == 1 -> own
             else -> null
         }
         if (target?.id != own?.id) {
@@ -263,12 +276,15 @@ class TabGroupModel(
     }
 
     companion object {
-        fun findMoved(old: List<String>, new: List<String>): String? {
+        /**
+         * The tab that changed place, preferring [dragged]: when two neighbours swap, either one could
+         * have been the one moved.
+         */
+        fun findMoved(old: List<String>, new: List<String>, dragged: String? = null): String? {
             if (old == new || old.size != new.size || old.toSet() != new.toSet()) return null
-            for (candidate in new) {
-                if (old.filter { it != candidate } == new.filter { it != candidate }) return candidate
-            }
-            return null
+            fun movedAlone(candidate: String) = old.filter { it != candidate } == new.filter { it != candidate }
+            if (dragged != null && dragged in new && movedAlone(dragged)) return dragged
+            return new.firstOrNull(::movedAlone)
         }
 
         /**
@@ -279,8 +295,9 @@ class TabGroupModel(
             order: List<String>,
             visibleBefore: List<String>,
             visibleAfter: List<String>,
+            dragged: String? = null,
         ): Pair<List<String>, String>? {
-            val moved = findMoved(visibleBefore, visibleAfter) ?: return null
+            val moved = findMoved(visibleBefore, visibleAfter, dragged) ?: return null
             val i = visibleAfter.indexOf(moved)
             val result = order.filter { it != moved }.toMutableList()
             val next = visibleAfter.getOrNull(i + 1)
