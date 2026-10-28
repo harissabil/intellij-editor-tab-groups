@@ -2,15 +2,21 @@
 <idea-plugin>
     <id>com.github.harissabil.editortabgroups</id>
     <name>Editor Tab Groups</name>
-    <vendor>harissabil</vendor>
+    <vendor url="https://github.com/harissabil">harissabil</vendor>
     <description><![CDATA[
-        <p>Named, colored, collapsible groups of editor tabs, shown directly in the editor tab strip.</p>
+        <p>Group editor tabs into named, colored groups that you can collapse and expand right in the tab bar,
+        the way tab groups work in web browsers.</p>
         <ul>
-            <li>Right-click a tab and choose <b>Add Tab to New Group</b>.</li>
-            <li>Click a group's label to collapse or expand it. Collapsed tabs stay open.</li>
-            <li>Right-click the label to rename, recolor, ungroup, save and close, or delete the group.</li>
-            <li>Drag the label to move the whole group.</li>
+            <li>Right-click a tab and choose <b>Add Tab to New Group</b>, then name the group and pick a color.</li>
+            <li>Click the group label to collapse or expand the group. Collapsed tabs stay open, including unsaved
+                changes; the selected tab stays visible until you switch away.</li>
+            <li>Drag tabs into or out of a group, or drag the group label to move the whole group.</li>
+            <li>Right-click the label to rename, recolor, copy the file paths, ungroup, save and close, or delete
+                the group.</li>
+            <li>Saved groups can be reopened later with <b>Reopen Saved Tab Group</b>.</li>
+            <li>Each editor split has its own groups. Groups are kept when the IDE restarts.</li>
         </ul>
+        <p>Works in IntelliJ-based IDEs, including Android Studio.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
