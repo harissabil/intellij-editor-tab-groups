@@ -158,9 +158,16 @@ class TabGroupModelTest {
     }
 
     @Test
-    fun `dropping a non member right after the last member does not join`() {
+    fun `dropping a tab right after the last member joins, also for a one-tab group`() {
+        val g = create("a")
+        model.onTabMoved("x", listOf("a", "x", "y"))
+        assertEquals(listOf("a", "x"), model.group(g.id)!!.files)
+    }
+
+    @Test
+    fun `dropping a tab in front of the first member stays outside`() {
         create("a", "b")
-        model.onTabMoved("x", listOf("a", "b", "x"))
+        model.onTabMoved("x", listOf("x", "a", "b"))
         assertNull(model.groupOf("x"))
     }
 
@@ -374,5 +381,46 @@ class TabGroupModelTest {
             visibleAfter = listOf("b", "c", "a"),
         )!!
         assertEquals(listOf("b", "c", "a"), order)
+    }
+
+    @Test
+    fun `findMoved prefers the dragged tab when neighbours swap`() {
+        assertEquals("x", TabGroupModel.findMoved(listOf("a", "x", "b"), listOf("a", "b", "x"), dragged = "x"))
+        assertEquals("b", TabGroupModel.findMoved(listOf("a", "x", "b"), listOf("a", "b", "x"), dragged = "b"))
+    }
+
+    @Test
+    fun `a group's only tab keeps its group when dragged`() {
+        val g = create("b")
+        model.onTabMoved("b", listOf("x", "b", "y"))
+        assertEquals(listOf("b"), model.group(g.id)!!.files)
+    }
+
+    @Test
+    fun `dragging a tab past a one-tab group joins it and keeps the group`() {
+        val g = create("b")
+        model.onTabMoved("x", listOf("a", "b", "x"))
+        assertEquals(listOf("b", "x"), model.group(g.id)!!.files)
+    }
+
+    @Test
+    fun `dragging a tab over a one-tab group from the right joins it`() {
+        val g = create("b")
+        model.onTabMoved("x", listOf("a", "x", "b"), oldStrip = listOf("a", "b", "x"))
+        assertEquals(listOf("x", "b"), model.group(g.id)!!.files)
+    }
+
+    @Test
+    fun `a tab arriving in front of a one-tab group from the left stays outside`() {
+        create("b")
+        model.onTabMoved("x", listOf("a", "x", "b"), oldStrip = listOf("x", "a", "b"))
+        assertNull(model.groupOf("x"))
+    }
+
+    @Test
+    fun `dropping in front of a larger group from the right stays outside`() {
+        create("b", "c")
+        model.onTabMoved("x", listOf("x", "b", "c"), oldStrip = listOf("b", "c", "x"))
+        assertNull(model.groupOf("x"))
     }
 }
