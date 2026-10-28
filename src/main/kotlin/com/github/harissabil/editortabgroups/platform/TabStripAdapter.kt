@@ -25,7 +25,7 @@ import kotlin.math.roundToInt
 
 private val LOG = logger<TabStripAdapter>()
 
-private const val ANIMATION_MS = 160
+private const val ANIMATION_MS = 220
 
 internal data class StripView(
     val hidden: Set<VirtualFile>,
@@ -73,8 +73,8 @@ internal class TabStripAdapter(
     private val compacted = IdentityHashMap<Component, Boolean>()
     private var painter: GroupDecorationPainter? = null
 
-    private val animations = IdentityHashMap<JComponent, Shrink>()
-    private val timer = Timer(15) { stepAnimations() }
+    private val animations = IdentityHashMap<JComponent, WidthAnimation>()
+    private val timer = Timer(1000 / 60) { stepAnimations() }
     private var rendered = false
 
     init {
@@ -200,21 +200,26 @@ internal class TabStripAdapter(
         val others = listOf(BorderLayout.CENTER, BorderLayout.EAST, BorderLayout.WEST)
             .mapNotNull(layout::getLayoutComponent)
             .filter { it !== chip }
-        val center = layout.getLayoutComponent(BorderLayout.CENTER) as? JComponent
         val isCompact = others.any { compacted.containsKey(it) }
-        if (compact && !isCompact) {
-            val hide = {
-                for (c in others) if (c.isVisible) {
-                    c.isVisible = false
-                    compacted[c] = true
-                }
-                label.revalidate()
+        fun hideOthers() {
+            for (c in others) if (c.isVisible) {
+                c.isVisible = false
+                compacted[c] = true
             }
-            if (animate && center != null) shrink(center, label, collapse = true, onDone = hide) else hide()
-        } else if (!compact && isCompact) {
+        }
+        fun showOthers() {
             for (c in others) if (compacted.remove(c) != null) c.isVisible = true
-            if (animate && center != null) shrink(center, label, collapse = false, onDone = {})
-            label.revalidate()
+        }
+        if (compact && !isCompact) {
+            if (!animate) return hideOthers()
+            hideOthers()
+            val target = naturalWidth(label)
+            showOthers()
+            animateWidth(label, target) { hideOthers() }
+        } else if (!compact && isCompact) {
+            val from = currentWidth(label)
+            showOthers()
+            if (animate) animateWidth(label, naturalWidth(label), from) {}
         }
     }
 
@@ -276,85 +281,78 @@ internal class TabStripAdapter(
         parent.repaint()
     }
 
-    // A tab is animated by narrowing the title part of its label (BorderLayout CENTER) to zero
-    // before it is hidden, and widening it from zero after it is shown.
+    // Tabs are animated by forcing the tab label's preferred width, which the tab layout uses for its
+    // size, from the current width to the target, then clearing it again.
 
-    private class Shrink(
-        val label: JComponent,
-        val full: Int,
-        var from: Float,
-        var to: Float,
-        var start: Long,
-        var onDone: () -> Unit,
-    ) {
-        var fraction = from
+    private class WidthAnimation(var from: Int, var to: Int, var start: Long, var onDone: () -> Unit) {
+        var current = from
     }
 
     private fun animateHidden(info: TabInfo, hide: Boolean) {
         val label = tabs.getTabLabel(info) as? JComponent
-        val center = (label?.layout as? BorderLayout)?.getLayoutComponent(BorderLayout.CENTER) as? JComponent
-        val running = center?.let(animations::get)
-        if (label == null || center == null || !label.isShowing && !info.isHidden) {
+        if (label == null || !label.isShowing && !info.isHidden) {
             if (info.isHidden != hide) info.isHidden = hide
             return
         }
+        val running = animations[label]
         if (hide) {
-            if (!info.isHidden && running?.to != 0f) shrink(center, label, collapse = true) { info.isHidden = true }
+            if (!info.isHidden && running?.to != 0) animateWidth(label, 0) { info.isHidden = true }
         } else if (info.isHidden) {
             info.isHidden = false
-            shrink(center, label, collapse = false, onDone = {})
-        } else if (running?.to == 0f) {
-            shrink(center, label, collapse = false, onDone = {})
+            animateWidth(label, naturalWidth(label), from = 0) {}
+        } else if (running?.to == 0) {
+            animateWidth(label, naturalWidth(label)) {}
         }
     }
 
-    private fun shrink(center: JComponent, label: JComponent, collapse: Boolean, onDone: () -> Unit) {
-        val running = animations[center]
-        val from = running?.fraction ?: if (collapse) 1f else 0f
-        val full = running?.full ?: naturalWidth(center)
-        animations[center] = Shrink(label, full, from, if (collapse) 0f else 1f, System.currentTimeMillis(), onDone)
-        applyWidth(center, full, from)
+    private fun animateWidth(label: JComponent, to: Int, from: Int = currentWidth(label), onDone: () -> Unit) {
+        animations[label] = WidthAnimation(from, to, System.currentTimeMillis(), onDone)
+        setWidth(label, from)
         if (!timer.isRunning) timer.start()
     }
 
+    private fun currentWidth(label: JComponent): Int =
+        animations[label]?.current ?: label.width.takeIf { it > 0 } ?: naturalWidth(label)
+
     private fun naturalWidth(c: JComponent): Int {
-        val forced = c.isPreferredSizeSet
-        val saved = if (forced) c.preferredSize else null
+        val forced = if (c.isPreferredSizeSet) c.preferredSize else null
         c.preferredSize = null
         val width = c.preferredSize.width
-        if (forced) c.preferredSize = saved
+        if (forced != null) c.preferredSize = forced
         return width
+    }
+
+    private fun setWidth(label: JComponent, width: Int) {
+        label.preferredSize = Dimension(width, label.preferredSize.height)
     }
 
     private fun stepAnimations() {
         val now = System.currentTimeMillis()
-        for ((center, a) in animations.toList()) {
+        for ((label, a) in animations.toList()) {
             val t = ((now - a.start).toFloat() / ANIMATION_MS).coerceIn(0f, 1f)
-            val eased = 1f - (1f - t) * (1f - t) * (1f - t)
-            a.fraction = a.from + (a.to - a.from) * eased
+            val eased = if (t < 0.5f) 4 * t * t * t else 1 - (-2 * t + 2).let { it * it * it } / 2
+            a.current = (a.from + (a.to - a.from) * eased).roundToInt()
             if (t >= 1f) {
-                animations.remove(center)
-                center.preferredSize = null
+                animations.remove(label)
+                label.preferredSize = null
                 a.onDone()
-                a.label.revalidate()
             } else {
-                applyWidth(center, a.full, a.fraction)
+                setWidth(label, a.current)
             }
+            label.revalidate()
         }
-        tabs.component.revalidate()
-        tabs.component.repaint()
+        // lay out now rather than on the next revalidation pass, so every frame shows
+        val component = tabs.component
+        component.revalidate()
+        component.validate()
+        component.repaint()
         if (animations.isEmpty()) timer.stop()
-    }
-
-    private fun applyWidth(center: JComponent, full: Int, fraction: Float) {
-        center.preferredSize = Dimension((full * fraction).roundToInt(), center.preferredSize.height)
-        center.parent?.revalidate()
     }
 
     override fun dispose() {
         timer.stop()
-        for ((center, a) in animations) {
-            center.preferredSize = null
+        for ((label, a) in animations) {
+            label.preferredSize = null
             a.onDone()
         }
         animations.clear()
