@@ -5,10 +5,8 @@ import com.github.harissabil.editortabgroups.ui.GroupColors
 import com.github.harissabil.editortabgroups.ui.OverflowBadge
 import com.intellij.openapi.ui.AbstractPainter
 import com.intellij.util.ui.JBUI
-import java.awt.Color
 import java.awt.Component
 import java.awt.Graphics2D
-import java.awt.Rectangle
 import java.awt.RenderingHints
 import javax.swing.JComponent
 import javax.swing.SwingUtilities
@@ -16,9 +14,8 @@ import javax.swing.SwingUtilities
 internal class GroupDecoration(val chip: GroupChip, val memberLabels: List<Component>, val badge: OverflowBadge? = null)
 
 /**
- * Paints on the glass pane above the tab strip: the group line under member tabs, and the chip and
- * "+N" badge on the tab bar background. The chip and badge live inside tab labels, and without the
- * mask the label's own hover and selection background would show behind them.
+ * Paints on the glass pane: the group line under member tabs, and the chip pill again on top, because
+ * the tab label paints its right-edge fade-out over its children, which covers the chip of a collapsed group.
  */
 internal class GroupDecorationPainter(private val tabsComponent: JComponent) : AbstractPainter() {
     var decorations: List<GroupDecoration> = emptyList()
@@ -45,18 +42,8 @@ internal class GroupDecorationPainter(private val tabsComponent: JComponent) : A
     private fun paint(target: Component, g: Graphics2D, d: GroupDecoration) {
         val chip = d.chip
         if (!chip.isShowing) return
-        mask(target, g, chip)
         val pill = SwingUtilities.convertRectangle(chip, chip.pillBounds(), target)
         chip.paintPill(g, pill)
-
-        var badgeRight: Int? = null
-        d.badge?.takeIf { it.isShowing }?.let { badge ->
-            mask(target, g, badge)
-            val r = SwingUtilities.convertRectangle(badge, badge.badgeBounds(), target)
-            badge.paintBadge(g, r)
-            badgeRight = r.x + r.width
-        }
-
         // Like Firefox: no line under a collapsed group unless its selected tab is showing.
         if (d.memberLabels.none { it.isShowing }) return
         var right = pill.x + pill.width
@@ -67,26 +54,13 @@ internal class GroupDecorationPainter(private val tabsComponent: JComponent) : A
             right = maxOf(right, r.x + r.width)
             bottom = maxOf(bottom, r.y + r.height)
         }
-        badgeRight?.let { right = maxOf(right, it) }
-        val thickness = JBUI.scale(2)
-        g.color = GroupColors.chip(chip.color)
-        val y = bottom - thickness - JBUI.scale(1)
-        g.fillRoundRect(pill.x, y, right - pill.x - JBUI.scale(4), thickness, thickness, thickness)
-    }
-
-    private fun mask(target: Component, g: Graphics2D, c: JComponent) {
-        val host = c.parent ?: return
-        val area = SwingUtilities.convertRectangle(host, Rectangle(c.x, 0, c.width, host.height), target)
-        g.color = stripBackground()
-        g.fillRect(area.x, area.y, area.width, area.height)
-    }
-
-    private fun stripBackground(): Color {
-        var c: Component? = tabsComponent
-        while (c != null) {
-            if (c.isOpaque && c.background != null) return c.background
-            c = c.parent
+        d.badge?.takeIf { it.isShowing }?.let { badge ->
+            val r = SwingUtilities.convertRectangle(badge, badge.badgeBounds(), target)
+            right = maxOf(right, r.x + r.width)
         }
-        return tabsComponent.background
+        val thickness = JBUI.scale(2)
+        val y = bottom - thickness - JBUI.scale(1)
+        g.color = GroupColors.chip(chip.color)
+        g.fillRoundRect(pill.x, y, right - pill.x - JBUI.scale(4), thickness, thickness, thickness)
     }
 }
