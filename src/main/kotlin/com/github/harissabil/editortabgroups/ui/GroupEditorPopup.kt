@@ -47,7 +47,7 @@ internal object GroupEditorPopup {
 
         val panel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            border = JBUI.Borders.empty(10, 12, 10, 12)
+            border = JBUI.Borders.empty(14, 12, 10, 12)
         }
 
         fun add(c: JComponent) = c.also { it.alignmentX = JComponent.LEFT_ALIGNMENT; panel.add(it) }
@@ -59,7 +59,10 @@ internal object GroupEditorPopup {
             })
         }
 
-        val dots = JPanel(java.awt.GridLayout(1, TabGroupColor.entries.size, 0, 0)).apply { isOpaque = false }
+        val dots = JPanel(java.awt.GridLayout(1, TabGroupColor.entries.size, 0, 0)).apply {
+            isOpaque = false
+            border = JBUI.Borders.emptyBottom(12)
+        }
         TabGroupColor.entries.forEach { color ->
             dots.add(ColorDot(color, color == group.color) {
                 service.setColor(window, groupId, color)
@@ -76,7 +79,7 @@ internal object GroupEditorPopup {
         }
         add(JPanel(BorderLayout()).apply {
             isOpaque = false
-            border = JBUI.Borders.empty(14, 0, 10, 0)
+            border = JBUI.Borders.empty(10, 0, 10, 0)
             add(nameField)
         })
 
