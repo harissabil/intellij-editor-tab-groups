@@ -1,19 +1,16 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <id>com.github.harissabil.editortabgroups</id>
-    <name>editor-tab-groups</name>
+    <name>Editor Tab Groups</name>
     <vendor>harissabil</vendor>
     <description><![CDATA[
-        <p><b>editor-tab-groups</b> is a repository that provides a pure template to make it easier to create a new plugin project.</p>
-        <p>The main goal of this template is to speed up the setup phase of plugin development for both new and experienced developers by preconfiguring the project scaffold and CI, linking to the proper documentation pages, and keeping everything organized.</p>
+        <p>Named, colored, collapsible groups of editor tabs, shown directly in the editor tab strip.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
 
-    <resource-bundle>messages.MyBundle</resource-bundle>
+    <resource-bundle>messages.TabGroupsBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.harissabil.editortabgroups.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.harissabil.editortabgroups.startup.MyProjectActivity" />
     </extensions>
 </idea-plugin>
