@@ -5,6 +5,12 @@
     <vendor>harissabil</vendor>
     <description><![CDATA[
         <p>Named, colored, collapsible groups of editor tabs, shown directly in the editor tab strip.</p>
+        <ul>
+            <li>Right-click a tab and choose <b>Add Tab to New Group</b>.</li>
+            <li>Click a group's label to collapse or expand it. Collapsed tabs stay open.</li>
+            <li>Right-click the label to rename, recolor, ungroup, save and close, or delete the group.</li>
+            <li>Drag the label to move the whole group.</li>
+        </ul>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -12,5 +18,31 @@
     <resource-bundle>messages.TabGroupsBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity implementation="com.github.harissabil.editortabgroups.platform.TabGroupsStartup"/>
     </extensions>
+
+    <actions>
+        <group id="EditorTabGroups.TabMenu">
+            <separator/>
+            <action id="EditorTabGroups.AddTabToNewGroup"
+                    class="com.github.harissabil.editortabgroups.ui.AddTabToNewGroupAction"/>
+            <group id="EditorTabGroups.AddTabToGroup"
+                   class="com.github.harissabil.editortabgroups.ui.AddTabToGroupMenu"/>
+            <action id="EditorTabGroups.RemoveTabFromGroup"
+                    class="com.github.harissabil.editortabgroups.ui.RemoveTabFromGroupAction"/>
+            <group id="EditorTabGroups.ReopenSavedGroup"
+                   class="com.github.harissabil.editortabgroups.ui.ReopenSavedGroupMenu"/>
+            <add-to-group group-id="EditorTabPopupMenu" anchor="after" relative-to-action="PinActiveEditorTab"/>
+        </group>
+
+        <group id="EditorTabGroups.WindowMenu">
+            <separator/>
+            <action id="EditorTabGroups.ToggleGroup"
+                    class="com.github.harissabil.editortabgroups.ui.ToggleTabGroupAction"/>
+            <action id="EditorTabGroups.ManageGroup"
+                    class="com.github.harissabil.editortabgroups.ui.ManageTabGroupAction"/>
+            <reference ref="EditorTabGroups.ReopenSavedGroup"/>
+            <add-to-group group-id="WindowMenu" anchor="last"/>
+        </group>
+    </actions>
 </idea-plugin>
