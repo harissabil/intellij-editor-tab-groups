@@ -39,6 +39,11 @@ intellijPlatform {
     }
 }
 
+// Release tags have no "v" prefix, so the changelog's version links must not add one.
+changelog {
+    versionPrefix = ""
+}
+
 // Run the plugin in a locally installed Android Studio:
 //   ./gradlew runAndroidStudio -PandroidStudioPath="C:/Program Files/Android/Android Studio"
 // The task is only registered when the property is set, so CI is unaffected.
