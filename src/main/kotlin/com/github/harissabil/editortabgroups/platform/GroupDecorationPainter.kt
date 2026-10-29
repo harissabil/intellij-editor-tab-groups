@@ -15,10 +15,7 @@ import javax.swing.SwingUtilities
 
 internal class GroupDecoration(val chip: GroupChip, val memberLabels: List<Component>, val badge: OverflowBadge? = null)
 
-/**
- * Paints on the glass pane: the group line under member tabs, and the chip pill again on top, because
- * the tab label paints its right-edge fade-out over its children, which covers the chip of a collapsed group.
- */
+/** Paints the group line under member tabs, and the drop marker while a group is dragged, on the glass pane. */
 internal class GroupDecorationPainter(private val tabsComponent: JComponent) : AbstractPainter() {
     var decorations: List<GroupDecoration> = emptyList()
         set(value) {
@@ -55,26 +52,32 @@ internal class GroupDecorationPainter(private val tabsComponent: JComponent) : A
 
     private fun paint(target: Component, g: Graphics2D, d: GroupDecoration) {
         val chip = d.chip
-        if (!chip.isShowing) return
-        val pill = SwingUtilities.convertRectangle(chip, chip.pillBounds(), target)
-        chip.paintPill(g, pill)
         // Like Firefox: no line under a collapsed group unless its selected tab is showing.
-        if (d.memberLabels.none { it.isShowing }) return
-        var right = pill.x + pill.width
+        val members = d.memberLabels.mapNotNull { (it as? JComponent)?.let { label -> visibleArea(label, target) } }
+        if (members.isEmpty()) return
+        val start = visibleArea(chip, target)?.let { SwingUtilities.convertRectangle(chip, chip.pillBounds(), target).x }
+        var left = start ?: Int.MAX_VALUE
+        var right = Int.MIN_VALUE
         var bottom = Int.MIN_VALUE
-        for (member in d.memberLabels) {
-            if (!member.isShowing) continue
-            val r = SwingUtilities.convertRectangle(member.parent, member.bounds, target)
+        for (r in members) {
+            // starts at the label when it is visible, otherwise at the first visible member
+            if (start == null) left = minOf(left, r.x)
             right = maxOf(right, r.x + r.width)
             bottom = maxOf(bottom, r.y + r.height)
         }
-        d.badge?.takeIf { it.isShowing }?.let { badge ->
-            val r = SwingUtilities.convertRectangle(badge, badge.badgeBounds(), target)
-            right = maxOf(right, r.x + r.width)
-        }
+        d.badge?.let { visibleArea(it, target) }?.let { right = maxOf(right, it.x + it.width) }
         val thickness = JBUI.scale(2)
         val y = bottom - thickness - JBUI.scale(1)
         g.color = GroupColors.chip(chip.color)
-        g.fillRoundRect(pill.x, y, right - pill.x - JBUI.scale(4), thickness, thickness, thickness)
+        g.fillRoundRect(left, y, right - left - JBUI.scale(4), thickness, thickness, thickness)
+    }
+
+    // What Swing would actually show of [c]: tabs that overflow the strip are laid out with zero size, and
+    // tabs scrolled to an edge are clipped, so the component's own bounds can't be trusted.
+    private fun visibleArea(c: JComponent, target: Component): Rectangle? {
+        if (!c.isShowing) return null
+        val visible = c.visibleRect
+        if (visible.isEmpty) return null
+        return SwingUtilities.convertRectangle(c, visible, target)
     }
 }
