@@ -21,6 +21,6 @@
 - Reopen Saved Tab Group for groups that were saved and closed
 - Separate groups per editor split, kept across IDE restarts
 
-[Unreleased]: https://github.com/harissabil/intellij-editor-tab-groups/compare/v0.1.1-beta...HEAD
-[0.1.1-beta]: https://github.com/harissabil/intellij-editor-tab-groups/compare/v0.1.0-beta...v0.1.1-beta
-[0.1.0-beta]: https://github.com/harissabil/intellij-editor-tab-groups/commits/v0.1.0-beta
+[Unreleased]: https://github.com/harissabil/intellij-editor-tab-groups/compare/0.1.1-beta...HEAD
+[0.1.1-beta]: https://github.com/harissabil/intellij-editor-tab-groups/compare/0.1.0-beta...0.1.1-beta
+[0.1.0-beta]: https://github.com/harissabil/intellij-editor-tab-groups/commits/0.1.0-beta
