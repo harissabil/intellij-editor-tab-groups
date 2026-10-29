@@ -77,6 +77,7 @@ internal class TabStripAdapter(
 
     private val chips = HashMap<String, GroupChip>()
     private val badges = HashMap<String, OverflowBadge>()
+    // Label parts changed for a compact chip: true = hidden, false = the title area squeezed to zero width.
     private val compacted = IdentityHashMap<Component, Boolean>()
     private var painter: GroupDecorationPainter? = null
 
@@ -207,15 +208,24 @@ internal class TabStripAdapter(
         val others = listOf(BorderLayout.CENTER, BorderLayout.EAST, BorderLayout.WEST)
             .mapNotNull(layout::getLayoutComponent)
             .filter { it !== chip }
+        val center = layout.getLayoutComponent(BorderLayout.CENTER)
         val isCompact = others.any { compacted.containsKey(it) }
+        // The title area is squeezed rather than hidden: the label paints a fade-out over a hidden or
+        // too narrow title area, which would cover the chip (TabLabel.paintFadeout).
         fun hideOthers() {
-            for (c in others) if (c.isVisible) {
-                c.isVisible = false
-                compacted[c] = true
+            for (c in others) {
+                if (compacted.containsKey(c)) continue
+                if (c === center && c is JComponent) {
+                    c.preferredSize = Dimension(0, c.preferredSize.height)
+                    compacted[c] = false
+                } else if (c.isVisible) {
+                    c.isVisible = false
+                    compacted[c] = true
+                }
             }
         }
         fun showOthers() {
-            for (c in others) if (compacted.remove(c) != null) c.isVisible = true
+            for (c in others) compacted.remove(c)?.let { hidden -> restore(c, hidden) }
         }
         if (compact && !isCompact) {
             if (!animate) return hideOthers()
@@ -305,10 +315,11 @@ internal class TabStripAdapter(
 
         override fun getWeight(): Double = 1.0
 
+        // Only the part of a chip Swing shows counts: overflowing tabs are laid out with zero size.
         private fun chipAt(e: MouseEvent): GroupChip? = chips.values.firstOrNull { chip ->
             chip.isShowing && Point(e.locationOnScreen).let {
                 SwingUtilities.convertPointFromScreen(it, chip)
-                chip.contains(it)
+                chip.visibleRect.contains(it)
             }
         }
 
@@ -358,11 +369,15 @@ internal class TabStripAdapter(
         }
     }
 
+    private fun restore(c: Component, hidden: Boolean) {
+        if (hidden) c.isVisible = true else (c as? JComponent)?.preferredSize = null
+    }
+
     private fun detach(component: JComponent) {
         val parent: Container = component.parent ?: return
         parent.remove(component)
         for (c in parent.components) {
-            if (compacted.remove(c) != null) c.isVisible = true
+            compacted.remove(c)?.let { hidden -> restore(c, hidden) }
         }
         parent.revalidate()
         parent.repaint()
