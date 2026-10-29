@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.1.1-beta] - 2026-10-29
+
 ### Fixed
 
 - Group label drawn over the wrong tab, or at the left edge, when the tab bar scrolls with many open tabs
@@ -18,3 +20,7 @@
 - Group panel on the label's context menu: rename, color, copy file paths, ungroup, save and close, delete
 - Reopen Saved Tab Group for groups that were saved and closed
 - Separate groups per editor split, kept across IDE restarts
+
+[Unreleased]: https://github.com/harissabil/intellij-editor-tab-groups/compare/v0.1.1-beta...HEAD
+[0.1.1-beta]: https://github.com/harissabil/intellij-editor-tab-groups/compare/v0.1.0-beta...v0.1.1-beta
+[0.1.0-beta]: https://github.com/harissabil/intellij-editor-tab-groups/commits/v0.1.0-beta
