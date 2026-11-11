@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Support IntelliJ-based IDEs 2026.3
+
 ## [0.1.1-beta] - 2026-10-29
 
 ### Fixed
