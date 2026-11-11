@@ -24,7 +24,6 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerEvent
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.ex.FileEditorManagerEx
-import com.intellij.openapi.fileEditor.ex.FileEditorOpenRequest
 import com.intellij.openapi.fileEditor.impl.EditorWindow
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
@@ -184,10 +183,10 @@ class TabGroupsService(private val project: Project) : PersistentStateComponent<
         if (files.isEmpty()) return
         s.model.restore(copy.copy(group = copy.group.copy(files = files.map { it.url })))
         val manager = FileEditorManagerEx.getInstanceEx(project)
-        for (file in files.reversed()) {
-            manager.openFile(file, FileEditorOpenRequest(targetWindow = window, selectAsCurrent = false))
-        }
-        manager.openFile(files.first(), FileEditorOpenRequest(targetWindow = window, selectAsCurrent = true))
+        // Each opened tab becomes the selected one, so opening in order keeps the group's order.
+        manager.currentWindow = window
+        for (file in files) manager.openFile(file, false)
+        manager.openFile(files.first(), true)
         sync()
     }
 
