@@ -1,6 +1,8 @@
 # IntelliJ Editor Tab Groups
 
 ![Build](https://github.com/harissabil/intellij-editor-tab-groups/workflows/Build/badge.svg)
+[![Version](https://img.shields.io/jetbrains/plugin/v/35580.svg)](https://plugins.jetbrains.com/plugin/35580)
+[![Downloads](https://img.shields.io/jetbrains/plugin/d/35580.svg)](https://plugins.jetbrains.com/plugin/35580)
 
 Named, colored, collapsible groups for editor tabs in IntelliJ-based IDEs.
 
