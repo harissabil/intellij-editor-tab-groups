@@ -35,6 +35,7 @@ intellijPlatform {
         ides {
             create(IntelliJPlatformType.IntellijIdea, "2026.1.4")
             create(IntelliJPlatformType.IntellijIdea, "2026.2.3")
+            create(IntelliJPlatformType.IntellijIdea, "2026.3")
         }
     }
 }
