@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.1.2-beta] - 2026-11-11
+
 ### Changed
 
 - Support IntelliJ-based IDEs 2026.3
@@ -25,6 +27,7 @@
 - Reopen Saved Tab Group for groups that were saved and closed
 - Separate groups per editor split, kept across IDE restarts
 
-[Unreleased]: https://github.com/harissabil/intellij-editor-tab-groups/compare/0.1.1-beta...HEAD
+[Unreleased]: https://github.com/harissabil/intellij-editor-tab-groups/compare/0.1.2-beta...HEAD
+[0.1.2-beta]: https://github.com/harissabil/intellij-editor-tab-groups/compare/0.1.1-beta...0.1.2-beta
 [0.1.1-beta]: https://github.com/harissabil/intellij-editor-tab-groups/compare/0.1.0-beta...0.1.1-beta
 [0.1.0-beta]: https://github.com/harissabil/intellij-editor-tab-groups/commits/0.1.0-beta
